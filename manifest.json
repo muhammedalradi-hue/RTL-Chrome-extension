@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
   "name": "RTL Toggle",
-  "version": "1.3.2",
-  "description": "إصلاح اتجاه ومحاذاة النص العربي في الصفحة الحالية بنقرة واحدة، مع تشغيل وإيقاف فوريين.",
-  "permissions": ["activeTab", "scripting"],
+  "version": "1.4.0",
+  "description": "إصلاح اتجاه ومحاذاة النص العربي بنقرة واحدة، مع إمكانية تثبيت الإصلاح ليعمل دائمًا على مواقع تختارها.",
+  "permissions": ["activeTab", "scripting", "contextMenus", "storage"],
+  "optional_host_permissions": ["*://*/*"],
   "action": {
     "default_title": "تشغيل إصلاح RTL",
     "default_icon": {
@@ -12,6 +13,10 @@
       "48": "icons/off-48.png",
       "128": "icons/off-128.png"
     }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
   },
   "background": {
     "service_worker": "background.js"

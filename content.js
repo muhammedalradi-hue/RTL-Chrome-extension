@@ -248,13 +248,38 @@
       });
   }
 
-  // لا يعمل الإصلاح تلقائيًا؛ لا يبدأ إلا عند ضغط المستخدم على الأيقونة.
+  // لا يعمل الإصلاح تلقائيًا؛ يبدأ عند ضغط المستخدم على الأيقونة،
+  // أو تلقائيًا إن كان الموقع ضمن "المواقع الدائمة".
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message?.type !== "crtl-toggle") return;
-    if (enabled) stop();
-    else start();
-    sendResponse({ enabled });
+    if (message?.type === "crtl-toggle") {
+      if (enabled) stop();
+      else start();
+      sendResponse({ enabled });
+      return;
+    }
+    // فرض حالة محددة بدل التبديل (تستخدمها المواقع الدائمة)
+    if (message?.type === "crtl-set") {
+      if (message.enabled === true && !enabled) start();
+      else if (message.enabled === false && enabled) stop();
+      sendResponse({ enabled });
+      return;
+    }
   });
 
-  // يبقى متوقفًا عند حقنه للمرة الأولى، ثم تشغّله رسالة crtl-toggle.
+  // نسأل الخلفية: هل هذا الموقع مثبّت للعمل دائمًا؟ إن كان كذلك نبدأ فورًا.
+  function askAutoStart() {
+    try {
+      chrome.runtime.sendMessage({ type: "crtl-hello", url: location.href }, (res) => {
+        // تجاهل انقطاع الاتصال بعامل الخدمة
+        if (chrome.runtime.lastError) return;
+        if (res?.autoStart === true && !enabled) start();
+      });
+    } catch (_) {}
+  }
+
+  if (document.body) {
+    askAutoStart();
+  } else {
+    document.addEventListener("DOMContentLoaded", askAutoStart, { once: true });
+  }
 })();

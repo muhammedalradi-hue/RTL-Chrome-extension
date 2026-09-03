@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RTL Toggle — المواقع الدائمة</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <h1>المواقع الدائمة</h1>
+      <p class="hint">
+        المواقع هنا يعمل عليها إصلاح RTL تلقائيًا مع كل فتح للصفحة، دون الحاجة
+        للضغط على الأيقونة. لإضافة موقع: افتحه، ثم اضغط بزر الفأرة الأيمن على
+        أيقونة الإضافة واختر «تشغيل دائمًا على هذا الموقع».
+      </p>
+
+      <section id="grant-box" class="grant" hidden>
+        <p id="grant-text"></p>
+        <button id="grant-btn" type="button" class="primary">منح الإذن وتثبيت الموقع</button>
+      </section>
+
+      <ul id="sites" class="sites"></ul>
+      <p id="empty" class="empty" hidden>لا توجد مواقع دائمة بعد.</p>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>
