@@ -311,6 +311,8 @@ function preparePageForPdf() {
     saved.push([el, el.getAttribute("style")]);
   };
 
+  // حاوية تمرير عمودي يستطيع المستخدم تمريرها فعلًا (auto/scroll).
+  // الحاويات المقصوصة (hidden) لا تُفتح: ما لا يراه المستخدم لا يُطبع.
   const isScroller = (el) => {
     let cs;
     try {
@@ -319,10 +321,7 @@ function preparePageForPdf() {
       return false;
     }
     const oy = cs.overflowY;
-    const ox = cs.overflowX;
-    const scrollY = (oy === "auto" || oy === "scroll" || oy === "hidden") && el.scrollHeight > el.clientHeight + 1;
-    const scrollX = (ox === "auto" || ox === "scroll") && el.scrollWidth > el.clientWidth + 1;
-    return scrollY || scrollX;
+    return (oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight + 1;
   };
 
   const chain = new Set([root, doc.body]);
@@ -332,12 +331,16 @@ function preparePageForPdf() {
     for (let e = el; e && e !== root; e = e.parentElement) chain.add(e);
   }
 
+  // نفتح المحور العمودي فقط ونقصّ الأفقي: لو زاد عرض المستند عن الورقة
+  // يصغّر Chrome الصفحة كلها ليلائمها (حتى النصف) وتختل العناصر المحسوبة
+  // بالبكسل مثل مخططات جانت.
   for (const el of chain) {
     if (!el) continue;
     remember(el);
     el.style.setProperty("height", "auto", "important");
     el.style.setProperty("max-height", "none", "important");
-    el.style.setProperty("overflow", "visible", "important");
+    el.style.setProperty("overflow-y", "visible", "important");
+    el.style.setProperty("overflow-x", "clip", "important");
   }
 
   // الظلال والتمويه تتحول في PDF إلى صور نقطية كبيرة بأقنعة شفافية،
@@ -375,6 +378,7 @@ function preparePageForPdf() {
       text-shadow: none !important;
     }
     [style*="position: sticky"], [style*="position:sticky"] { position: relative !important; }
+    html { overflow-x: clip !important; }
   `;
   doc.head.appendChild(style);
 
