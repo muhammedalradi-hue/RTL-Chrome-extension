@@ -1,6 +1,7 @@
 // أيقونة الإضافة تشغّل إصلاح RTL أو توقفه في التبويب الحالي فقط.
 // وقائمة الزر الأيمن على أيقونة الإضافة تتيح تثبيت الإصلاح دائمًا
 // على الموقع النشط، فيعمل تلقائيًا في كل مرة تُفتح فيها صفحاته.
+// كما تتيح حفظ الصفحة الحالية كما تظهر للمستخدم في ملف PDF بحجم الصفحة.
 
 const ICONS = {
   on: {
@@ -20,6 +21,8 @@ const ICONS = {
 const STORAGE_KEY = "alwaysOnSites";
 const MENU_ALWAYS = "crtl-always-on-site";
 const MENU_MANAGE = "crtl-manage-sites";
+const MENU_PDF = "crtl-save-pdf";
+const MENU_PDF_PAGE = "crtl-save-pdf-page";
 const SCRIPT_ID = "crtl-always-on";
 
 // ===== المواقع الدائمة =====
@@ -53,9 +56,26 @@ async function isAlwaysOn(url) {
   return sites.includes(pattern);
 }
 
+async function hasOriginPermission(pattern) {
+  try {
+    return await chrome.permissions.contains({ origins: [pattern] });
+  } catch (_) {
+    return false;
+  }
+}
+
 // نسجّل سكربت محتوى ديناميكيًا للمواقع الدائمة، فيُحقن مع كل تحميل صفحة
 // دون انتظار ضغط المستخدم. نتجاهل أي موقع لم يُمنح إذنه بعد.
-async function syncRegistration() {
+// الاستدعاءات تُنفَّذ بالتسلسل: استدعاءان متزامنان (من storage.onChanged
+// ومن enableSite مثلًا) كانا يتسابقان على التسجيل ويلغي أحدهما الآخر.
+let registrationQueue = Promise.resolve();
+
+function syncRegistration() {
+  registrationQueue = registrationQueue.then(doSyncRegistration, doSyncRegistration);
+  return registrationQueue;
+}
+
+async function doSyncRegistration() {
   let registered = [];
   try {
     registered = await chrome.scripting.getRegisteredContentScripts({ ids: [SCRIPT_ID] });
@@ -64,9 +84,7 @@ async function syncRegistration() {
   const sites = await getSites();
   const allowed = [];
   for (const pattern of sites) {
-    try {
-      if (await chrome.permissions.contains({ origins: [pattern] })) allowed.push(pattern);
-    } catch (_) {}
+    if (await hasOriginPermission(pattern)) allowed.push(pattern);
   }
 
   if (!allowed.length) {
@@ -95,6 +113,8 @@ async function syncRegistration() {
     // إعادة المحاولة بتسجيل نظيف إن فشل التحديث
     try {
       await chrome.scripting.unregisterContentScripts({ ids: [SCRIPT_ID] });
+    } catch (_) {}
+    try {
       await chrome.scripting.registerContentScripts([script]);
     } catch (_) {}
   }
@@ -132,6 +152,16 @@ async function sendToggle(tabId) {
   return chrome.tabs.sendMessage(tabId, { type: "crtl-toggle" });
 }
 
+// هل الإصلاح مشغّل في هذا التبويب الآن؟ (false إن لم يكن السكربت محقونًا)
+async function getTabState(tabId) {
+  try {
+    const res = await chrome.tabs.sendMessage(tabId, { type: "crtl-state" });
+    return res?.enabled === true;
+  } catch (_) {
+    return false;
+  }
+}
+
 async function injectIntoTab(tabId) {
   await chrome.scripting.insertCSS({
     target: { tabId },
@@ -167,6 +197,38 @@ async function applyToTab(tabId, on) {
   }
 }
 
+// المسار الاحتياطي للمواقع الدائمة: إن لم يُحقن السكربت المسجّل لأي سبب
+// (تسجيل ضاع بعد تحديث الإضافة، أو صفحة كانت مفتوحة قبل التثبيت) نحقنه
+// نحن مباشرة ما دام إذن الموقع ممنوحًا. إن كان يعمل أصلًا فلا يتغير شيء.
+async function ensureAutoOn(tabId, url) {
+  if (tabId == null || !url) return false;
+  const pattern = patternFromUrl(url);
+  if (!pattern) return false;
+  const sites = await getSites();
+  if (!sites.includes(pattern)) return false;
+  if (!(await hasOriginPermission(pattern))) return false;
+  await applyToTab(tabId, true);
+  return true;
+}
+
+// عند تثبيت الإضافة أو تحديثها أو تشغيل المتصفح: شغّل الإصلاح في
+// التبويبات المفتوحة فعلًا على مواقع دائمة دون انتظار إعادة تحميلها.
+async function applyToOpenTabs() {
+  let tabs = [];
+  try {
+    tabs = await chrome.tabs.query({});
+  } catch (_) {
+    return;
+  }
+  for (const tab of tabs) {
+    // tab.url لا يصلنا إلا للمواقع التي مُنح إذنها، وهي المطلوبة هنا
+    if (!tab?.id || !tab.url) continue;
+    try {
+      await ensureAutoOn(tab.id, tab.url);
+    } catch (_) {}
+  }
+}
+
 // عنوان التبويب: قد لا يرسله Chrome في كائن tab قبل منح الإذن،
 // لذلك نجرّب أكثر من طريق قبل الاستسلام.
 async function resolveTabUrl(tab) {
@@ -186,7 +248,152 @@ async function resolveTabUrl(tab) {
   return null;
 }
 
-// ===== قائمة الزر الأيمن على أيقونة الإضافة =====
+// ===== حفظ الصفحة كملف PDF =====
+
+// نستخدم بروتوكول DevTools عبر chrome.debugger لأنه الطريقة الوحيدة في
+// الإضافات لإنتاج PDF متجهي (نص قابل للتحديد) بأبعاد مخصصة. نطبع بوسائط
+// "screen" لا "print" حتى تخرج الصفحة كما يراها المستخدم (بما فيها الوضع
+// الداكن والخلفيات)، ونجعل حجم الورقة مساويًا لعرض نافذة العرض وطول
+// الصفحة الكامل، فتخرج الصفحة كلها في ورقة واحدة بلا هوامش ولا تقسيم.
+
+const PX_PER_INCH = 96;
+// أقصى بُعد تقبله معظم قارئات PDF (200 بوصة = 14400 نقطة)
+const MAX_PAPER_INCHES = 200;
+
+function cdp(target, method, params = {}) {
+  return chrome.debugger.sendCommand(target, method, params);
+}
+
+function pdfFilename(title, url, asciiOnly = false) {
+  let base = String(title || "").trim();
+  if (!base) {
+    try {
+      base = new URL(url).hostname;
+    } catch (_) {}
+  }
+  if (!base) base = "page";
+  if (asciiOnly) base = base.replace(/[^\x20-\x7e]/g, "");
+  base = base
+    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120)
+    .replace(/[. ]+$/, "");
+  if (!base) base = "page";
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return `${base} ${stamp}.pdf`;
+}
+
+async function notifyTab(tabId, text) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (t) => window.alert(t),
+      args: [text],
+    });
+  } catch (_) {
+    // صفحة محمية: لا يمكن عرض الرسالة
+  }
+}
+
+async function renderPdf(tabId) {
+  const target = { tabId };
+  await chrome.debugger.attach(target, "1.3");
+  try {
+    await cdp(target, "Emulation.setEmulatedMedia", { media: "screen" });
+
+    const m = await cdp(target, "Page.getLayoutMetrics");
+    const content = m.cssContentSize || m.contentSize || {};
+    const viewport = m.cssLayoutViewport || m.layoutViewport || {};
+
+    // العرض = عرض نافذة العرض (حتى يبقى التخطيط كما يراه المستخدم)،
+    // والطول = طول الصفحة كاملة بما فيه ما يُرى بالتمرير.
+    const widthPx = Math.max(1, Math.round(viewport.clientWidth || content.width || 800));
+    const heightPx = Math.max(1, Math.round(Math.max(content.height || 0, viewport.clientHeight || 0)));
+
+    // هامش صغير لطول الورقة حتى لا يخرج سطر أخير في ورقة ثانية فارغة
+    // بسبب فرق تقريب بين تخطيط الشاشة وتخطيط الطباعة.
+    const paperWidth = Math.min(widthPx / PX_PER_INCH, MAX_PAPER_INCHES);
+    const paperHeight = Math.min((heightPx + 2) / PX_PER_INCH, MAX_PAPER_INCHES);
+
+    const res = await cdp(target, "Page.printToPDF", {
+      printBackground: true,
+      preferCSSPageSize: false,
+      displayHeaderFooter: false,
+      landscape: false,
+      scale: 1,
+      paperWidth,
+      paperHeight,
+      marginTop: 0,
+      marginBottom: 0,
+      marginLeft: 0,
+      marginRight: 0,
+      transferMode: "ReturnAsBase64",
+    });
+    if (!res?.data) throw new Error("لم يُعِد المتصفح أي بيانات PDF");
+    return res.data;
+  } finally {
+    try {
+      await cdp(target, "Emulation.setEmulatedMedia", { media: "" });
+    } catch (_) {}
+    try {
+      await chrome.debugger.detach(target);
+    } catch (_) {}
+  }
+}
+
+const pdfInProgress = new Set();
+
+async function savePageAsPdf(tab) {
+  if (!tab?.id) return;
+  const tabId = tab.id;
+  if (pdfInProgress.has(tabId)) return;
+  pdfInProgress.add(tabId);
+
+  const wasOn = await getTabState(tabId);
+  try {
+    await chrome.action.setBadgeText({ tabId, text: "PDF" });
+    await chrome.action.setBadgeBackgroundColor({ tabId, color: "#2563EB" });
+    await chrome.action.setTitle({ tabId, title: "جارٍ إنشاء ملف PDF…" });
+  } catch (_) {}
+
+  try {
+    const data = await renderPdf(tabId);
+    const url = (await resolveTabUrl(tab)) || tab.url || "";
+    const dataUrl = "data:application/pdf;base64," + data;
+    try {
+      await chrome.downloads.download({
+        url: dataUrl,
+        filename: pdfFilename(tab.title, url),
+        conflictAction: "uniquify",
+      });
+    } catch (err) {
+      // بعض الأنظمة ترفض أسماء الملفات غير اللاتينية؛ نعيد المحاولة باسم بسيط
+      if (!/filename/i.test(String(err?.message || err))) throw err;
+      await chrome.downloads.download({
+        url: dataUrl,
+        filename: pdfFilename(null, url, true),
+        conflictAction: "uniquify",
+      });
+    }
+  } catch (err) {
+    const reason = String(err?.message || err || "");
+    let msg = "تعذر حفظ الصفحة كملف PDF.";
+    if (/chrome:|extension|devtools|Cannot access|Cannot attach/i.test(reason)) {
+      msg += "\nهذه الصفحة محمية أو مفتوحة فيها أدوات المطوّر؛ أغلق أدوات المطوّر أو جرّب صفحة أخرى.";
+    } else if (reason) {
+      msg += "\n" + reason;
+    }
+    await notifyTab(tabId, msg);
+  } finally {
+    pdfInProgress.delete(tabId);
+    await updateAction(wasOn, tabId);
+  }
+}
+
+// ===== قائمة الزر الأيمن =====
 
 function createMenus() {
   chrome.contextMenus.removeAll(() => {
@@ -198,9 +405,20 @@ function createMenus() {
       contexts: ["action"],
     });
     chrome.contextMenus.create({
+      id: MENU_PDF,
+      title: "حفظ الصفحة كملف PDF",
+      contexts: ["action"],
+    });
+    chrome.contextMenus.create({
       id: MENU_MANAGE,
       title: "إدارة المواقع الدائمة…",
       contexts: ["action"],
+    });
+    // نفس أداة PDF من قائمة الزر الأيمن داخل الصفحة نفسها
+    chrome.contextMenus.create({
+      id: MENU_PDF_PAGE,
+      title: "حفظ الصفحة كملف PDF (بحجم الصفحة)",
+      contexts: ["page"],
     });
   });
 }
@@ -231,9 +449,7 @@ async function enableSite(pattern, tab) {
     granted = await chrome.permissions.request({ origins: [pattern] });
   } catch (_) {
     // بعض إصدارات Chrome لا تسمح بطلب الإذن من عامل الخدمة مباشرة
-    try {
-      granted = await chrome.permissions.contains({ origins: [pattern] });
-    } catch (_) {}
+    granted = await hasOriginPermission(pattern);
   }
 
   if (!granted) {
@@ -264,6 +480,10 @@ async function disableSite(pattern, tab) {
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === MENU_MANAGE) {
     chrome.runtime.openOptionsPage();
+    return;
+  }
+  if (info.menuItemId === MENU_PDF || info.menuItemId === MENU_PDF_PAGE) {
+    await savePageAsPdf(tab);
     return;
   }
   if (info.menuItemId !== MENU_ALWAYS) return;
@@ -328,11 +548,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // ===== متابعة حالة التبويبات =====
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  if (changeInfo.status !== "loading") return;
   const url = changeInfo.url || tab?.url || null;
-  const on = url ? await isAlwaysOn(url) : false;
-  await updateAction(on, tabId);
-  if (tab?.active) await refreshMenuForTab({ ...tab, url });
+
+  if (changeInfo.status === "loading") {
+    const on = url ? await isAlwaysOn(url) : false;
+    await updateAction(on, tabId);
+    if (tab?.active) await refreshMenuForTab({ ...tab, url });
+    return;
+  }
+
+  // اكتمل التحميل: تأكد أن الإصلاح يعمل فعلًا على المواقع الدائمة،
+  // حتى لو لم يُحقن السكربت المسجّل لأي سبب.
+  if (changeInfo.status === "complete") {
+    try {
+      await ensureAutoOn(tabId, url);
+    } catch (_) {}
+  }
 });
 
 chrome.tabs.onActivated.addListener(() => refreshMenuForActiveTab());
@@ -349,20 +580,26 @@ chrome.permissions.onRemoved.addListener(async (permissions) => {
   await refreshMenuForActiveTab();
 });
 
+// إن مُنح إذن موقع من صفحة الإعدادات نحدّث التسجيل فورًا
+chrome.permissions.onAdded.addListener(async () => {
+  await syncRegistration();
+  await applyToOpenTabs();
+});
+
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local" || !changes[STORAGE_KEY]) return;
-  syncRegistration();
+  syncRegistration().then(applyToOpenTabs);
   refreshMenuForActiveTab();
 });
 
 chrome.runtime.onInstalled.addListener(() => {
   createMenus();
-  syncRegistration();
   updateAction(false);
+  syncRegistration().then(applyToOpenTabs);
 });
 
 chrome.runtime.onStartup.addListener(() => {
   createMenus();
-  syncRegistration();
   updateAction(false);
+  syncRegistration().then(applyToOpenTabs);
 });

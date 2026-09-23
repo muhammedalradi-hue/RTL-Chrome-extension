@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "RTL Toggle",
-  "version": "1.4.0",
-  "description": "إصلاح اتجاه ومحاذاة النص العربي بنقرة واحدة، مع إمكانية تثبيت الإصلاح ليعمل دائمًا على مواقع تختارها.",
-  "permissions": ["activeTab", "scripting", "contextMenus", "storage"],
+  "version": "1.5.0",
+  "description": "إصلاح اتجاه ومحاذاة النص العربي بنقرة واحدة، مع تثبيت الإصلاح على مواقع تختارها، وحفظ الصفحة كما تراها في ملف PDF بحجم الصفحة.",
+  "permissions": ["activeTab", "scripting", "contextMenus", "storage", "debugger", "downloads"],
   "optional_host_permissions": ["*://*/*"],
   "action": {
     "default_title": "تشغيل إصلاح RTL",

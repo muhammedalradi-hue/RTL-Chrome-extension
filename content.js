@@ -213,7 +213,12 @@
   }
 
   function start() {
-    if (!document.body || started) return;
+    if (started) return;
+    if (!document.body) {
+      // حُقن السكربت قبل اكتمال الوثيقة: ابدأ حين تتوفر
+      document.addEventListener("DOMContentLoaded", start, { once: true });
+      return;
+    }
     enabled = true;
     started = true;
     scan(document.body);
@@ -264,17 +269,33 @@
       sendResponse({ enabled });
       return;
     }
+    // استعلام عن الحالة فقط دون تغييرها
+    if (message?.type === "crtl-state") {
+      sendResponse({ enabled });
+      return;
+    }
   });
 
   // نسأل الخلفية: هل هذا الموقع مثبّت للعمل دائمًا؟ إن كان كذلك نبدأ فورًا.
-  function askAutoStart() {
+  // عامل الخدمة قد يكون نائمًا فيضيع أول طلب أثناء إيقاظه؛ نعيد المحاولة
+  // مرات قليلة قبل الاستسلام (الخلفية نفسها تحقن الإصلاح احتياطًا أيضًا).
+  function askAutoStart(attempt = 0) {
+    if (enabled) return;
+    const retry = () => {
+      if (attempt < 3) setTimeout(() => askAutoStart(attempt + 1), 400 * (attempt + 1));
+    };
     try {
       chrome.runtime.sendMessage({ type: "crtl-hello", url: location.href }, (res) => {
-        // تجاهل انقطاع الاتصال بعامل الخدمة
-        if (chrome.runtime.lastError) return;
-        if (res?.autoStart === true && !enabled) start();
+        if (chrome.runtime.lastError) {
+          retry();
+          return;
+        }
+        if (res?.autoStart === true) start();
+        else if (res == null) retry();
       });
-    } catch (_) {}
+    } catch (_) {
+      retry();
+    }
   }
 
   if (document.body) {
