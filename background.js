@@ -298,9 +298,122 @@ async function notifyTab(tabId, text) {
   }
 }
 
+// يُنفَّذ داخل الصفحة قبل الطباعة: كثير من تطبيقات الويب تجعل المستند
+// بطول الشاشة وتضع التمرير في حاوية داخلية (overflow: auto)، فتخرج
+// الطباعة بالجزء الظاهر فقط. نوسّع حاويات التمرير هذه وسلسلة آبائها
+// مؤقتًا حتى يظهر محتواها كاملًا، ونعطّل المؤثرات التي تتحول إلى صور
+// نقطية ضخمة تبطئ فتح الملف، ثم نقيس الطول الحقيقي.
+function preparePageForPdf() {
+  const doc = document;
+  const root = doc.documentElement;
+  const saved = [];
+  const remember = (el) => {
+    saved.push([el, el.getAttribute("style")]);
+  };
+
+  const isScroller = (el) => {
+    let cs;
+    try {
+      cs = getComputedStyle(el);
+    } catch (_) {
+      return false;
+    }
+    const oy = cs.overflowY;
+    const ox = cs.overflowX;
+    const scrollY = (oy === "auto" || oy === "scroll" || oy === "hidden") && el.scrollHeight > el.clientHeight + 1;
+    const scrollX = (ox === "auto" || ox === "scroll") && el.scrollWidth > el.clientWidth + 1;
+    return scrollY || scrollX;
+  };
+
+  const chain = new Set([root, doc.body]);
+  for (const el of doc.querySelectorAll("body *")) {
+    if (el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.tagName === "PRE" || el.tagName === "CODE") continue;
+    if (!isScroller(el)) continue;
+    for (let e = el; e && e !== root; e = e.parentElement) chain.add(e);
+  }
+
+  for (const el of chain) {
+    if (!el) continue;
+    remember(el);
+    el.style.setProperty("height", "auto", "important");
+    el.style.setProperty("max-height", "none", "important");
+    el.style.setProperty("overflow", "visible", "important");
+  }
+
+  // الظلال والتمويه تتحول في PDF إلى صور نقطية كبيرة بأقنعة شفافية،
+  // وكثرتها هي ما يبطئ التمرير في القارئ. نستبدل ظل كل عنصر بحد رفيع
+  // يحافظ على تمييز البطاقات دون كلفة.
+  for (const el of doc.querySelectorAll("body *")) {
+    let cs;
+    try {
+      cs = getComputedStyle(el);
+    } catch (_) {
+      continue;
+    }
+    const hasShadow = cs.boxShadow && cs.boxShadow !== "none";
+    const hasFilter = cs.filter && cs.filter !== "none" && /blur|drop-shadow/.test(cs.filter);
+    if (!hasShadow && !hasFilter) continue;
+    if (!chain.has(el)) remember(el);
+    if (hasShadow) {
+      el.style.setProperty("box-shadow", "none", "important");
+      if (cs.outlineStyle === "none" && cs.borderStyle === "none") {
+        el.style.setProperty("outline", "1px solid rgba(0,0,0,0.08)", "important");
+        el.style.setProperty("outline-offset", "-1px", "important");
+      }
+    }
+    if (hasFilter) el.style.setProperty("filter", "none", "important");
+  }
+
+  const style = doc.createElement("style");
+  style.id = "crtl-pdf-style";
+  style.textContent = `
+    *, *::before, *::after {
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+      animation: none !important;
+      transition: none !important;
+      text-shadow: none !important;
+    }
+    [style*="position: sticky"], [style*="position:sticky"] { position: relative !important; }
+  `;
+  doc.head.appendChild(style);
+
+  window.__crtlPdfRestore = () => {
+    for (const [el, st] of saved) {
+      if (st == null) el.removeAttribute("style");
+      else el.setAttribute("style", st);
+    }
+    style.remove();
+    delete window.__crtlPdfRestore;
+  };
+
+  // بعد التوسيع: الطول الحقيقي للمحتوى
+  let height = Math.max(root.scrollHeight, doc.body ? doc.body.scrollHeight : 0);
+  for (const el of chain) {
+    try {
+      const r = el.getBoundingClientRect();
+      height = Math.max(height, r.bottom + window.scrollY);
+    } catch (_) {}
+  }
+  return { width: root.clientWidth, height: Math.ceil(height) };
+}
+
+async function evalInPage(target, fn) {
+  const res = await cdp(target, "Runtime.evaluate", {
+    expression: `(${fn.toString()})()`,
+    returnByValue: true,
+    awaitPromise: true,
+  });
+  if (res?.exceptionDetails) {
+    throw new Error(res.exceptionDetails.exception?.description || res.exceptionDetails.text || "خطأ داخل الصفحة");
+  }
+  return res?.result?.value;
+}
+
 async function renderPdf(tabId) {
   const target = { tabId };
   await chrome.debugger.attach(target, "1.3");
+  let prepared = false;
   try {
     await cdp(target, "Emulation.setEmulatedMedia", { media: "screen" });
 
@@ -308,10 +421,23 @@ async function renderPdf(tabId) {
     const content = m.cssContentSize || m.contentSize || {};
     const viewport = m.cssLayoutViewport || m.layoutViewport || {};
 
+    let widthPx = Math.round(viewport.clientWidth || content.width || 800);
+    let heightPx = Math.round(Math.max(content.height || 0, viewport.clientHeight || 0));
+
+    // وسّع حاويات التمرير الداخلية وقِس الطول الحقيقي
+    try {
+      const dims = await evalInPage(target, preparePageForPdf);
+      prepared = true;
+      if (dims?.height > heightPx) heightPx = Math.round(dims.height);
+      if (dims?.width && !viewport.clientWidth) widthPx = Math.round(dims.width);
+    } catch (_) {
+      // نكمل بالقياس الأساسي
+    }
+
     // العرض = عرض نافذة العرض (حتى يبقى التخطيط كما يراه المستخدم)،
     // والطول = طول الصفحة كاملة بما فيه ما يُرى بالتمرير.
-    const widthPx = Math.max(1, Math.round(viewport.clientWidth || content.width || 800));
-    const heightPx = Math.max(1, Math.round(Math.max(content.height || 0, viewport.clientHeight || 0)));
+    widthPx = Math.max(1, widthPx);
+    heightPx = Math.max(1, heightPx);
 
     // هامش صغير لطول الورقة حتى لا يخرج سطر أخير في ورقة ثانية فارغة
     // بسبب فرق تقريب بين تخطيط الشاشة وتخطيط الطباعة.
@@ -330,11 +456,21 @@ async function renderPdf(tabId) {
       marginBottom: 0,
       marginLeft: 0,
       marginRight: 0,
+      // الوسوم البنيوية والفهرس يضخّمان الملف ويبطئان التمرير في القارئ
+      generateTaggedPDF: false,
+      generateDocumentOutline: false,
       transferMode: "ReturnAsBase64",
     });
     if (!res?.data) throw new Error("لم يُعِد المتصفح أي بيانات PDF");
     return res.data;
   } finally {
+    if (prepared) {
+      try {
+        await evalInPage(target, () => {
+          if (typeof window.__crtlPdfRestore === "function") window.__crtlPdfRestore();
+        });
+      } catch (_) {}
+    }
     try {
       await cdp(target, "Emulation.setEmulatedMedia", { media: "" });
     } catch (_) {}
