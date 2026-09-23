@@ -306,57 +306,99 @@ async function notifyTab(tabId, text) {
 function preparePageForPdf() {
   const doc = document;
   const root = doc.documentElement;
+  const body = doc.body;
+  const viewportWidth = root.clientWidth;
   const saved = [];
+  const seen = new Set();
   const remember = (el) => {
+    if (seen.has(el)) return;
+    seen.add(el);
     saved.push([el, el.getAttribute("style")]);
   };
-
-  // حاوية تمرير عمودي يستطيع المستخدم تمريرها فعلًا (auto/scroll).
-  // الحاويات المقصوصة (hidden) لا تُفتح: ما لا يراه المستخدم لا يُطبع.
-  const isScroller = (el) => {
-    let cs;
+  const css = (el) => {
     try {
-      cs = getComputedStyle(el);
+      return getComputedStyle(el);
     } catch (_) {
-      return false;
+      return null;
     }
-    const oy = cs.overflowY;
-    return (oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight + 1;
   };
 
-  const chain = new Set([root, doc.body]);
+  // 1) حاويات التمرير العمودي التي يستطيع المستخدم تمريرها فعلًا.
+  //    لا نغيّر overflow إطلاقًا (حتى لا يتسرب أي محتوى أفقيًا ويجعل
+  //    Chrome يصغّر الصفحة)، بل نوسّع ارتفاع الحاوية إلى ارتفاع محتواها
+  //    ونحرر ارتفاع سلسلة آبائها حتى تنمو معها.
+  const scrollers = [];
   for (const el of doc.querySelectorAll("body *")) {
-    if (el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.tagName === "PRE" || el.tagName === "CODE") continue;
-    if (!isScroller(el)) continue;
-    for (let e = el; e && e !== root; e = e.parentElement) chain.add(e);
+    const tag = el.tagName;
+    if (tag === "TEXTAREA" || tag === "SELECT" || tag === "PRE" || tag === "CODE") continue;
+    const cs = css(el);
+    if (!cs) continue;
+    const oy = cs.overflowY;
+    if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight + 1) {
+      scrollers.push([el, el.scrollHeight]);
+    }
   }
 
-  // نفتح المحور العمودي فقط ونقصّ الأفقي: لو زاد عرض المستند عن الورقة
-  // يصغّر Chrome الصفحة كلها ليلائمها (حتى النصف) وتختل العناصر المحسوبة
-  // بالبكسل مثل مخططات جانت.
-  for (const el of chain) {
-    if (!el) continue;
+  const chain = new Set();
+  for (const [el] of scrollers) {
+    for (let e = el.parentElement; e && e !== root && e !== body; e = e.parentElement) chain.add(e);
+  }
+
+  const freeHeight = (el) => {
     remember(el);
     el.style.setProperty("height", "auto", "important");
     el.style.setProperty("max-height", "none", "important");
-    el.style.setProperty("overflow-y", "visible", "important");
-    el.style.setProperty("overflow-x", "clip", "important");
+    // عنصر داخل flex عمودي يتجاهل height ما دام flex-basis صفرًا
+    const pcs = el.parentElement ? css(el.parentElement) : null;
+    if (pcs && /flex/.test(pcs.display) && /column/.test(pcs.flexDirection)) {
+      el.style.setProperty("flex", "0 0 auto", "important");
+    }
+  };
+
+  if (root) freeHeight(root);
+  if (body) freeHeight(body);
+  for (const el of chain) freeHeight(el);
+  for (const [el, h] of scrollers) {
+    freeHeight(el);
+    el.style.setProperty("height", h + "px", "important");
+    el.style.setProperty("min-height", h + "px", "important");
+  }
+  // أعد التمرير إلى الأعلى داخل كل حاوية حتى لا يُقص أول المحتوى
+  for (const [el] of scrollers) {
+    try {
+      el.scrollTop = 0;
+    } catch (_) {}
   }
 
-  // الظلال والتمويه تتحول في PDF إلى صور نقطية كبيرة بأقنعة شفافية،
-  // وكثرتها هي ما يبطئ التمرير في القارئ. نستبدل ظل كل عنصر بحد رفيع
-  // يحافظ على تمييز البطاقات دون كلفة.
+  // 2) عناصر خارج الشاشة أفقيًا بالكامل (ألواح منزلقة، قوائم مخفية بإزاحة):
+  //    لا يراها المستخدم لكنها توسّع المستند عند الطباعة فيصغّر Chrome
+  //    الصفحة كلها. نخفيها مؤقتًا.
   for (const el of doc.querySelectorAll("body *")) {
-    let cs;
+    const cs = css(el);
+    if (!cs || cs.display === "none") continue;
+    if (cs.position !== "fixed" && cs.position !== "absolute") continue;
+    let r;
     try {
-      cs = getComputedStyle(el);
+      r = el.getBoundingClientRect();
     } catch (_) {
       continue;
     }
+    if (r.width === 0) continue;
+    if (r.right <= 0 || r.left >= viewportWidth) {
+      remember(el);
+      el.style.setProperty("display", "none", "important");
+    }
+  }
+
+  // 3) الظلال والتمويه تتحول في PDF إلى صور نقطية كبيرة بأقنعة شفافية،
+  //    وكثرتها هي ما يبطئ التمرير في القارئ. نستبدل ظل كل عنصر بحد رفيع.
+  for (const el of doc.querySelectorAll("body *")) {
+    const cs = css(el);
+    if (!cs) continue;
     const hasShadow = cs.boxShadow && cs.boxShadow !== "none";
     const hasFilter = cs.filter && cs.filter !== "none" && /blur|drop-shadow/.test(cs.filter);
     if (!hasShadow && !hasFilter) continue;
-    if (!chain.has(el)) remember(el);
+    remember(el);
     if (hasShadow) {
       el.style.setProperty("box-shadow", "none", "important");
       if (cs.outlineStyle === "none" && cs.borderStyle === "none") {
@@ -377,29 +419,27 @@ function preparePageForPdf() {
       transition: none !important;
       text-shadow: none !important;
     }
-    [style*="position: sticky"], [style*="position:sticky"] { position: relative !important; }
-    html { overflow-x: clip !important; }
   `;
   doc.head.appendChild(style);
 
   window.__crtlPdfRestore = () => {
     for (const [el, st] of saved) {
-      if (st == null) el.removeAttribute("style");
+      if (st == null || st === "") el.removeAttribute("style");
       else el.setAttribute("style", st);
     }
     style.remove();
     delete window.__crtlPdfRestore;
   };
 
-  // بعد التوسيع: الطول الحقيقي للمحتوى
-  let height = Math.max(root.scrollHeight, doc.body ? doc.body.scrollHeight : 0);
-  for (const el of chain) {
+  // بعد التوسيع: الأبعاد الحقيقية للمحتوى
+  let height = Math.max(root.scrollHeight, body ? body.scrollHeight : 0);
+  for (const [el] of scrollers) {
     try {
-      const r = el.getBoundingClientRect();
-      height = Math.max(height, r.bottom + window.scrollY);
+      height = Math.max(height, el.getBoundingClientRect().bottom + window.scrollY);
     } catch (_) {}
   }
-  return { width: root.clientWidth, height: Math.ceil(height) };
+  const docWidth = Math.max(root.scrollWidth, body ? body.scrollWidth : 0);
+  return { width: viewportWidth, height: Math.ceil(height), docWidth };
 }
 
 async function evalInPage(target, fn) {
