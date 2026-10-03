@@ -10,18 +10,20 @@ The line above imports the shared governance (git workflow, reviews, user-facing
 
 ## Stack and deployment
 
-(Not written yet. Fill in when the next real change happens.)
-
-## Conventions
-
-(Not written yet. Fill in when the next real change happens.)
+- Chrome extension, Manifest V3, plain JavaScript, no build step and no dependencies.
+- `background.js` (service worker): toolbar action and context menu, pinned sites in `chrome.storage`, PDF export through the `debugger` and `downloads` permissions.
+- `content.js` + `content.css`: detect Arabic text and apply the RTL fixes on the page.
+- `options.html/js/css`: manage pinned sites.
+- Deployment: load unpacked from `chrome://extensions` (developer mode) or publish to the Chrome Web Store; bump `version` in `manifest.json` with every release.
 
 ## Sources of truth, in priority order
 
-1. (Not written yet. Fill in when the next real change happens.)
-2. (Not written yet. Fill in when the next real change happens.)
-3. (Not written yet. Fill in when the next real change happens.)
+1. `manifest.json`: permissions, entry points and version.
+2. `README.md`: features as the user sees them.
 
 ## Product rules
 
-(Not written yet. Fill in when the next real change happens.)
+- One click fixes Arabic text direction and alignment on the current page without reloading it.
+- A pinned site gets the fix automatically on every visit.
+- PDF export saves the page as one page matching the viewport width and the full page height, keeping its styles (dark mode included).
+- No data collection: everything stays in `chrome.storage.local`; host access is optional and requested only when needed.
