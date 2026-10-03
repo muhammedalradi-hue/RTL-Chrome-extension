@@ -1,4 +1,4 @@
-<!-- master-governance v1.1.0 · managed copy, do not edit here. Change it in github.com/muhammedalradi-hue/master-governance and run scripts/sync.sh (see "Changing a rule" below). -->
+<!-- master-governance v1.2.0 · managed copy, do not edit here. Change it in github.com/muhammedalradi-hue/master-governance and run scripts/sync.sh (see "Changing a rule" below). -->
 
 # Governance for coding agents
 
@@ -39,6 +39,7 @@ After any change to a screen, before opening the pull request:
 - Nothing cut off: dialogs, drawers, menus and dropdowns fit the viewport; no horizontal scrolling of the page; text is not truncated where it must be read.
 - Check the empty state, the loading state and the error state, not only the happy path.
 - Forms keep what the user typed when something fails.
+- Every password field has an eye button that shows or hides the password: inside the field at the end of the text, hidden by default, a plain button (it never submits the form) named in every locale, and pressing it keeps the focus and what was typed. This covers sign-in, sign-up, reset and change-password forms.
 
 ## Security and data
 
