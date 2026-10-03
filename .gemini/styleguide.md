@@ -1,4 +1,4 @@
-<!-- master-governance v1.2.0 · the part above the project-rules markers is a managed copy, do not edit it here. Change it in github.com/muhammedalradi-hue/master-governance and run scripts/sync.sh. -->
+<!-- master-governance v1.3.0 · the part above the project-rules markers is a managed copy, do not edit it here. Change it in github.com/muhammedalradi-hue/master-governance and run scripts/sync.sh. -->
 
 # Gemini Code Review Rules
 
