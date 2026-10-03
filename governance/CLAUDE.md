@@ -1,4 +1,4 @@
-<!-- master-governance v1.2.0 · managed copy, do not edit here. Change it in github.com/muhammedalradi-hue/master-governance and run scripts/sync.sh (see "Changing a rule" below). -->
+<!-- master-governance v1.3.0 · managed copy, do not edit here. Change it in github.com/muhammedalradi-hue/master-governance and run scripts/sync.sh (see "Changing a rule" below). -->
 
 # Governance for coding agents
 
@@ -16,7 +16,9 @@ Every change goes through a pull request, without being asked:
 
 1. Work on a branch (the session's designated branch when there is one), push it and open a pull request into `main` (or the branch the project's `CLAUDE.md` names as playing that role, with the owner's dated exception). Never push to that branch directly, and do not keep separate working branches (`demo`, `staging`) unless the owner asks for one in the project's `CLAUDE.md`. The one exception is the first commit of an empty repository. Gemini sees only pull requests, so this is what makes it review everything.
 2. Reviews start on their own when the pull request opens. After a substantial follow-up push, comment `/gemini review` to get a fresh one.
-3. Handle every finding before merging: fix it and push, or reply explaining why not. Then resolve the thread. A finding about user-facing text or layout is as real as one about logic.
+3. Handle every finding from Gemini or Codex before merging: fix it and push, or reply explaining why not. Then resolve the thread. A finding about user-facing text or layout is as real as one about logic. Fix a finding when it arrives, without waiting to be asked.
+   - **No review arrived** (Gemini's daily quota ran out, a reviewer did not run, or nothing came back): tell the owner and let them decide whether to wait for the review or go ahead without it. Never merge an unreviewed pull request on your own.
+   - **The owner let it through without review:** that pull request is not reviewed later. The next review covers only the new features asked for after it, unless the owner explicitly asks for the skipped part to be reviewed too.
 4. Merge with **rebase** (keeps history linear) only when the checks are green, every thread is resolved and there is no conflict. When the project deploys on merge (its `CLAUDE.md` says so), merging is a release: do not merge what you have not run.
 5. A change that needs a database migration waits: the owner runs the migration first and confirms, then you merge. Never edit a migration that has been applied; add a new one. A project whose `CLAUDE.md` defines another mechanism (migrations applied automatically on merge, or one cumulative idempotent setup file that is re-run in full) follows that mechanism instead, and the pull request says which migration it carries.
 
