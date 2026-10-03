@@ -6,7 +6,7 @@ The line above imports the shared governance (git workflow, reviews, user-facing
 
 ## What this repo is
 
-إضافة Chrome تصلح اتجاه ومحاذاة النصوص العربية في الصفحات التي تعرضها من اليسار
+إضافة Chrome تصلح اتجاه ومحاذاة النصوص العربية في الصفحات التي تعرضها من اليسار إلى اليمين، بنقرة واحدة ودون تحديث الصفحة.
 
 ## Stack and deployment
 
