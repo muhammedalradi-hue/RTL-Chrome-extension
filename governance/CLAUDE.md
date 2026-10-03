@@ -14,11 +14,11 @@ These rules apply to every project connected to `master-governance`. The project
 
 Every change goes through a pull request, without being asked:
 
-1. Work on a branch (the session's designated branch when there is one), push it and open a pull request into `main`. Never push to `main` directly, and do not keep separate working branches (`demo`, `staging`) unless the owner asks for one in the project's `CLAUDE.md`. The one exception is the first commit of an empty repository. Gemini sees only pull requests, so this is what makes it review everything.
+1. Work on a branch (the session's designated branch when there is one), push it and open a pull request into `main` (or the branch the project's `CLAUDE.md` names as playing that role, with the owner's dated exception). Never push to that branch directly, and do not keep separate working branches (`demo`, `staging`) unless the owner asks for one in the project's `CLAUDE.md`. The one exception is the first commit of an empty repository. Gemini sees only pull requests, so this is what makes it review everything.
 2. Reviews start on their own when the pull request opens. After a substantial follow-up push, comment `/gemini review` to get a fresh one.
 3. Handle every finding before merging: fix it and push, or reply explaining why not. Then resolve the thread. A finding about user-facing text or layout is as real as one about logic.
 4. Merge with **rebase** (keeps history linear) only when the checks are green, every thread is resolved and there is no conflict. When the project deploys on merge (its `CLAUDE.md` says so), merging is a release: do not merge what you have not run.
-5. A change that needs a database migration waits: the owner runs the migration first and confirms, then you merge. Never edit a migration that has been applied; add a new one.
+5. A change that needs a database migration waits: the owner runs the migration first and confirms, then you merge. Never edit a migration that has been applied; add a new one. A project whose `CLAUDE.md` defines another mechanism (migrations applied automatically on merge, or one cumulative idempotent setup file that is re-run in full) follows that mechanism instead, and the pull request says which migration it carries.
 
 ## User-facing text
 
@@ -55,9 +55,9 @@ After any change to a screen, before opening the pull request:
 
 ## Changing a rule
 
-The earlier account-wide master (`MASTER_SPEC.md` and the per-project `GOVERNANCE.md`, legal copy once in `projects-release-hub`) is retired by owner decision (2026-10-03). Delete those files wherever they still exist and remove references to them; this repository is the only master.
+The earlier account-wide master (`MASTER_SPEC.md` and the per-project `GOVERNANCE.md`, legal copy once in `projects-release-hub`) is retired by owner decision (2026-10-03). Delete those files wherever they still exist and remove references to them; the `master-governance` repository is the only master. Before deleting a project's `GOVERNANCE.md`, carry the rules only it holds into the project's `CLAUDE.md` and the project section of `.gemini/styleguide.md`.
 
-Governance has one source of truth: `github.com/muhammedalradi-hue/master-governance`. Every connected project carries a copy (`governance/CLAUDE.md`, `.gemini/config.yaml`, the generic part of `.gemini/styleguide.md`) stamped with the master version.
+Governance has one source of truth: [`github.com/muhammedalradi-hue/master-governance`](https://github.com/muhammedalradi-hue/master-governance). Every connected project carries a copy (`governance/CLAUDE.md`, `.gemini/config.yaml`, the generic part of `.gemini/styleguide.md`) stamped with the master version.
 
 - **A problem worth a rule.** When something goes wrong during development and a rule would prevent it next time, do not add the rule on your own. Ask the owner: "This happened; shall I record it as a rule for every project?" Only if they say yes:
   1. Change it in `master-governance` through a pull request there, bump `VERSION`, add a line to `CHANGELOG.md`.
