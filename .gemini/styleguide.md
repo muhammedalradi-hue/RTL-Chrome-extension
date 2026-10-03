@@ -1,4 +1,4 @@
-<!-- master-governance v1.1.0 · the part above the project-rules markers is a managed copy, do not edit it here. Change it in github.com/muhammedalradi-hue/master-governance and run scripts/sync.sh. -->
+<!-- master-governance v1.2.0 · the part above the project-rules markers is a managed copy, do not edit it here. Change it in github.com/muhammedalradi-hue/master-governance and run scripts/sync.sh. -->
 
 # Gemini Code Review Rules
 
@@ -32,6 +32,7 @@ Screens:
 - Anything that can be cut off at phone width: dialogs, drawers, menus, dropdowns, tables, long names. Fixed heights and widths, `overflow: hidden` on text, hard-coded left/right in an RTL product.
 - Empty, loading and error states exist and make sense.
 - Forms do not lose the user's input on a recoverable error.
+- A password field without an eye button to show or hide it, or one whose button submits the form, has no accessible name, or loses the typed value or the focus.
 - Touch targets, focus, keyboard access and contrast on the elements the diff adds.
 
 ## Always check
