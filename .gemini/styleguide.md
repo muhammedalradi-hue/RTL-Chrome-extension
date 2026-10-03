@@ -32,7 +32,7 @@ Screens:
 - Anything that can be cut off at phone width: dialogs, drawers, menus, dropdowns, tables, long names. Fixed heights and widths, `overflow: hidden` on text, hard-coded left/right in an RTL product.
 - Empty, loading and error states exist and make sense.
 - Forms do not lose the user's input on a recoverable error.
-- A password field without an eye button to show or hide it, or one whose button submits the form, has no accessible name, or loses the typed value or the focus.
+- A password field without an eye button to show or hide it. The button sits inside the field at the end of the text, the password starts hidden, the button never submits the form, its name exists in every locale, and pressing it keeps the focus and what was typed; flag any of these that is missing.
 - Touch targets, focus, keyboard access and contrast on the elements the diff adds.
 
 ## Always check
