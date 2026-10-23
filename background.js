@@ -134,14 +134,9 @@ async function updateAction(enabled, tabId) {
       ...target,
       title: enabled ? "إيقاف إصلاح RTL" : "تشغيل إصلاح RTL",
     });
-    await chrome.action.setBadgeText({
-      ...target,
-      text: enabled ? "✓" : "×",
-    });
-    await chrome.action.setBadgeBackgroundColor({
-      ...target,
-      color: enabled ? "#16835B" : "#6B7280",
-    });
+    // الأيقونة الملوّنة تعني التشغيل والرمادية الإيقاف، فلا علامة فوقها.
+    // النص الفارغ يمسح أيضًا شارة «PDF» بعد انتهاء الحفظ.
+    await chrome.action.setBadgeText({ ...target, text: "" });
   } catch (_) {
     // التبويب أُغلق أثناء التحديث
   }
