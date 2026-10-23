@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="body" x1="0.85" y1="0.1" x2="0.15" y2="0.95">
+      <stop offset="0" stop-color="#FFD84A"/>
+      <stop offset="0.55" stop-color="#FFA62B"/>
+      <stop offset="1" stop-color="#F2542D"/>
+    </linearGradient>
+    <radialGradient id="blush" cx="0.72" cy="0.3" r="0.45">
+      <stop offset="0" stop-color="#FF4D4D" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#FF4D4D" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="leaf" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#1E9E5A"/>
+      <stop offset="1" stop-color="#5DD39E"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ثمرة المانجو -->
+  <path d="M252 150
+           C350 128 430 205 414 312
+           C400 405 318 452 236 436
+           C176 424 132 392 112 418
+           C104 380 118 338 132 296
+           C150 222 188 162 252 150 Z"
+        fill="url(#body)"/>
+  <path d="M252 150
+           C350 128 430 205 414 312
+           C400 405 318 452 236 436
+           C176 424 132 392 112 418
+           C104 380 118 338 132 296
+           C150 222 188 162 252 150 Z"
+        fill="url(#blush)"/>
+
+  <!-- لمعة -->
+  <path d="M190 228 C205 200 228 184 254 180"
+        fill="none" stroke="#FFFFFF" stroke-opacity="0.75"
+        stroke-width="16" stroke-linecap="round"/>
+
+  <!-- الساق -->
+  <path d="M256 154 C252 132 246 118 236 104"
+        fill="none" stroke="#6B4226" stroke-width="12" stroke-linecap="round"/>
+
+  <!-- الورقة -->
+  <path d="M258 150
+           C276 96 336 66 400 76
+           C384 134 326 162 258 150 Z"
+        fill="url(#leaf)"/>
+  <path d="M266 144 C310 128 350 104 386 84"
+        fill="none" stroke="#FFFFFF" stroke-opacity="0.55"
+        stroke-width="5" stroke-linecap="round"/>
+</svg>
