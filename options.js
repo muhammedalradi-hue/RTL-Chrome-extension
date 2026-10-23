@@ -1,4 +1,4 @@
-// إدارة المواقع التي يعمل عليها إصلاح RTL دائمًا.
+// إعدادات الإضافة: الإملاء، والمواقع التي يعمل عليها إصلاح RTL دائمًا.
 
 const STORAGE_KEY = "alwaysOnSites";
 
@@ -100,3 +100,89 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 setupGrant();
 render();
+
+// ===== الإملاء =====
+
+const DICT_KEY = "dictKey";
+const DICT_LANG = "dictLang";
+
+const keyInput = document.getElementById("dict-key");
+const eyeBtn = document.getElementById("dict-key-eye");
+const langSelect = document.getElementById("dict-lang");
+const micState = document.getElementById("mic-state");
+const micBtn = document.getElementById("mic-btn");
+const micDenied = document.getElementById("mic-denied");
+const shortcutEl = document.getElementById("shortcut");
+const shortcutBtn = document.getElementById("shortcut-btn");
+
+async function setupDictation() {
+  const data = await chrome.storage.local.get([DICT_KEY, DICT_LANG]);
+  keyInput.value = data[DICT_KEY] || "";
+  langSelect.value = data[DICT_LANG] === "en" ? "en" : "ar";
+  if (!keyInput.value && location.hash === "#dictation") keyInput.focus();
+}
+
+let keyTimer = 0;
+keyInput.addEventListener("input", () => {
+  clearTimeout(keyTimer);
+  keyTimer = setTimeout(() => chrome.storage.local.set({ [DICT_KEY]: keyInput.value.trim() }), 300);
+});
+
+// زر العين لا يأخذ المؤشر من الحقل ولا يغيّر ما كُتب فيه.
+eyeBtn.addEventListener("mousedown", (e) => e.preventDefault());
+eyeBtn.addEventListener("click", () => {
+  const show = keyInput.type === "password";
+  keyInput.type = show ? "text" : "password";
+  const label = show ? "إخفاء المفتاح" : "إظهار المفتاح";
+  eyeBtn.setAttribute("aria-label", label);
+  eyeBtn.title = label;
+  eyeBtn.querySelector(".eye-show").hidden = show;
+  eyeBtn.querySelector(".eye-hide").hidden = !show;
+});
+
+langSelect.addEventListener("change", () => chrome.storage.local.set({ [DICT_LANG]: langSelect.value }));
+
+// إذن الميكروفون يُمنح لأصل الإضافة كله، ولا يظهر طلبه إلا في صفحة ظاهرة
+// كهذه؛ المستند الخفي الذي يسجّل يستعمله بعد ذلك.
+function showMic(state) {
+  micState.textContent = state === "granted" ? "مسموح" : state === "denied" ? "محظور" : "";
+  micBtn.hidden = state !== "prompt";
+  micDenied.hidden = state !== "denied";
+}
+
+async function setupMic() {
+  try {
+    const status = await navigator.permissions.query({ name: "microphone" });
+    showMic(status.state);
+    status.onchange = () => showMic(status.state);
+  } catch (_) {
+    showMic("prompt");
+  }
+}
+
+micBtn.addEventListener("click", async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    for (const t of stream.getTracks()) t.stop();
+    showMic("granted");
+  } catch (_) {
+    setupMic();
+  }
+});
+
+async function setupShortcut() {
+  let shortcut = "";
+  try {
+    const commands = await chrome.commands.getAll();
+    shortcut = commands.find((c) => c.name === "dictate")?.shortcut || "";
+  } catch (_) {}
+  shortcutEl.textContent = shortcut || "غير محدد";
+}
+
+shortcutBtn.addEventListener("click", () => chrome.tabs.create({ url: "chrome://extensions/shortcuts" }));
+// يعود المستخدم من صفحة الاختصارات إلى هذه الصفحة.
+window.addEventListener("focus", setupShortcut);
+
+setupDictation();
+setupMic();
+setupShortcut();

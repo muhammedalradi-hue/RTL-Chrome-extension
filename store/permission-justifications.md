@@ -7,10 +7,11 @@
 
 ## Single purpose description
 
-RTL Toggle fixes the direction and alignment of Arabic text on web pages that
-render it left-to-right, so the text displays correctly right-to-left, and lets
-the user save the corrected page exactly as displayed as a single-page PDF sized
-to the page. Both features act only on the tab the user invokes them on.
+RTL Toggle helps people write and read Arabic in the browser: it fixes the
+direction and alignment of Arabic text on web pages that render it
+left-to-right, lets the user dictate text by voice into any text field, and
+lets the user save the corrected page exactly as displayed as a single-page PDF
+sized to the page. Every feature acts only on the tab the user invokes it on.
 
 ## Permission: activeTab
 
@@ -29,7 +30,8 @@ has chosen to always enable. Nothing is injected into any other site.
 
 ## Permission: contextMenus
 
-Adds a right-click menu on the extension's own toolbar icon with three items:
+Adds a "Dictate" item on editable fields, which starts and stops dictation in
+that field. Also adds a right-click menu on the extension's own toolbar icon with three items:
 "Always run on this site" — a checkbox that pins the RTL fix to the site the
 user is currently on — "Save page as PDF", and "Manage pinned sites", which
 opens the extension's options page. One item, "Save page as PDF (page size)",
@@ -37,14 +39,28 @@ is also added to the web page context menu so the user can export the page
 they are looking at without reaching for the toolbar. These menus are the only
 interface for the pinned-sites and PDF features.
 
+## Permission: offscreen
+
+Used only for dictation. A Manifest V3 service worker cannot capture the
+microphone, so when the user starts dictation (keyboard shortcut or the
+"Dictate" item on an editable field) the extension opens an offscreen document
+with the `USER_MEDIA` reason, records until the user stops, sends the recording
+to Google Gemini for transcription, and closes the document when the text has
+been written.
+
+## Commands (keyboard shortcut)
+
+One command, "Dictate" (`Ctrl+Shift+Space` by default, changeable in
+`chrome://extensions/shortcuts`), starts and stops dictation in the focused
+field of the current tab. Invoking it grants `activeTab` for that tab only.
+
 ## Permission: storage
 
-Stores one thing in `chrome.storage.local`: the list of site match patterns the
-user has explicitly pinned (for example `https://example.com/*`). This is needed
-so the extension knows which sites to enable automatically after the browser is
-restarted, and so the options page can list them for removal. No browsing
-history, page content, credentials, or personal data is stored, and nothing is
-transmitted off the device.
+Stores in `chrome.storage.local`: the list of site match patterns the user has
+explicitly pinned (for example `https://example.com/*`), so the extension knows
+which sites to enable automatically after a restart; and, if the user sets up
+dictation, their own Gemini API key and dictation language. No browsing history
+or page content is stored.
 
 ## Permission: debugger
 
@@ -80,8 +96,14 @@ from a remote source.
 
 ## Data usage
 
-The extension does not collect or transmit any user data. Certify all three
-statements:
+The developer collects no user data and runs no server. The only data that
+leaves the browser is the voice recording during dictation, sent directly from
+the user's browser to Google's Gemini API (`generativelanguage.googleapis.com`)
+with the user's own API key, solely to transcribe it into the field the user is
+typing in. The recording is not stored after the text comes back. Declare it in
+the form accordingly (the dashboard asks which data types are handled; voice
+input belongs under user-provided content), and link a privacy policy that
+says the same. Certify all three statements:
 
 - I do not sell or transfer user data to third parties, outside of the approved
   use cases.

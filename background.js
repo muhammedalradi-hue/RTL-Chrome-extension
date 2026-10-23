@@ -1,7 +1,8 @@
 // أيقونة الإضافة تشغّل إصلاح RTL أو توقفه في التبويب الحالي فقط.
 // وقائمة الزر الأيمن على أيقونة الإضافة تتيح تثبيت الإصلاح دائمًا
 // على الموقع النشط، فيعمل تلقائيًا في كل مرة تُفتح فيها صفحاته.
-// كما تتيح حفظ الصفحة الحالية كما تظهر للمستخدم في ملف PDF بحجم الصفحة.
+// كما تتيح حفظ الصفحة الحالية كما تظهر للمستخدم في ملف PDF بحجم الصفحة،
+// والإملاء بالصوت في أي حقل كتابة.
 
 const ICONS = {
   on: {
@@ -573,6 +574,226 @@ async function savePageAsPdf(tab) {
   }
 }
 
+// ===== الإملاء =====
+
+// الاختصار (أو «إملاء» في قائمة الزر الأيمن على حقل كتابة) يبدأ التسجيل،
+// ومرة ثانية توقفه فيُكتب ما قيل في الحقل. التسجيل والطلب إلى Gemini في
+// مستند خفي (offscreen.js)، والكتابة في الصفحة في dictate.js؛ هنا ننسق بينهما.
+
+const MENU_DICTATE = "crtl-dictate";
+const COMMAND_DICTATE = "dictate";
+const DICT_KEY = "dictKey";
+const DICT_LANG = "dictLang";
+// ما تعلّمه الإملاء عن الحساب: النموذج الذي نجح يُحفظ دائمًا، وأي تحسين
+// رفضته الواجهة يُترك حتى إغلاق المتصفح فقط، فلا يُفقد إلى الأبد برفض عابر.
+const DICT_MODEL = "dictModel";
+const DICT_TUNING = "dictTuning";
+
+const DICT_ERRORS = {
+  "mic-denied": "اسمح بالميكروفون من الإعدادات",
+  "mic-busy": "الميكروفون مشغول",
+  "mic-lost": "انقطع الميكروفون",
+  "mic-error": "تعذّر تشغيل الميكروفون",
+};
+
+// { session, tabId, frameId, phase: "starting" | "recording" | "busy" }
+let dict = null;
+let dictSession = 0;
+let offscreenCreating = null;
+
+async function ensureOffscreen() {
+  const contexts = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
+  if (contexts.length) return;
+  if (!offscreenCreating) {
+    offscreenCreating = chrome.offscreen
+      .createDocument({
+        url: "offscreen.html",
+        reasons: ["USER_MEDIA"],
+        justification: "تسجيل الإملاء من الميكروفون",
+      })
+      .finally(() => (offscreenCreating = null));
+  }
+  await offscreenCreating;
+}
+
+async function closeOffscreen() {
+  // جلسة جديدة بدأت في الأثناء تستعمل المستند نفسه.
+  if (dict) return;
+  try {
+    await chrome.offscreen.closeDocument();
+  } catch (_) {}
+}
+
+function toOffscreen(msg) {
+  return chrome.runtime.sendMessage({ target: "offscreen", ...msg });
+}
+
+function toFrame(tabId, frameId, msg) {
+  return chrome.tabs.sendMessage(tabId, { type: "crtl-dict", ...msg }, { frameId }).catch(() => null);
+}
+
+function openDictationSettings() {
+  chrome.tabs.create({ url: chrome.runtime.getURL("options.html#dictation") });
+}
+
+// يحقن dictate.js ويعيد الإطار الذي فيه الحقل. الإطار العلوي إلزامي (فيه
+// الشريط)، وبقية الإطارات قد يرفض Chrome بعضها فلا يمنع ذلك الإملاء.
+async function prepareTab(tabId, frameHint) {
+  await chrome.scripting.executeScript({ target: { tabId }, files: ["dictate.js"] });
+  if (frameHint) {
+    try {
+      await chrome.scripting.executeScript({ target: { tabId, frameIds: [frameHint] }, files: ["dictate.js"] });
+      return frameHint;
+    } catch (_) {
+      return 0;
+    }
+  }
+  try {
+    await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["dictate.js"] });
+  } catch (_) {}
+  let probes = [];
+  try {
+    probes = await chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      func: () => globalThis.__crtlDictProbe?.() ?? null,
+    });
+  } catch (_) {}
+  // الإطار العلوي يُعدّ مركّزًا أيضًا حين يكون المؤشر في إطار داخله، فنفضّل الداخلي.
+  const hit = probes
+    .filter((p) => p?.result?.focused && p.result.editable)
+    .sort((a, b) => (b.frameId || 0) - (a.frameId || 0))[0];
+  return hit?.frameId || 0;
+}
+
+async function startDictation(tab, frameHint) {
+  const stored = await chrome.storage.local.get([DICT_KEY, DICT_LANG, DICT_MODEL]);
+  const tuning = (await chrome.storage.session.get(DICT_TUNING))[DICT_TUNING] || {};
+  const key = String(stored[DICT_KEY] || "").trim();
+  if (!key) {
+    openDictationSettings();
+    return;
+  }
+
+  let frameId;
+  try {
+    frameId = await prepareTab(tab.id, frameHint);
+  } catch (_) {
+    // صفحة محمية مثل chrome:// أو متجر الإضافات
+    return;
+  }
+
+  const session = ++dictSession;
+  dict = { session, tabId: tab.id, frameId, phase: "starting" };
+  if (frameId) await toFrame(tab.id, frameId, { op: "begin", target: true });
+  await toFrame(tab.id, 0, { op: "begin", ui: true, target: frameId === 0 });
+
+  let res = null;
+  try {
+    await ensureOffscreen();
+    res = await toOffscreen({
+      type: "start",
+      session,
+      key,
+      lang: stored[DICT_LANG] === "en" ? "en" : "ar",
+      model: stored[DICT_MODEL] || null,
+      thinkingStep: tuning.thinkingStep,
+      compressed: tuning.compressed,
+    });
+  } catch (_) {}
+
+  if (dict?.session !== session) return;
+  if (!res?.ok) {
+    const error = res?.error || "mic-error";
+    await endDictation(DICT_ERRORS[error] || DICT_ERRORS["mic-error"]);
+    await closeOffscreen();
+    if (error === "mic-denied") openDictationSettings();
+    return;
+  }
+  dict.phase = "recording";
+}
+
+async function stopDictation() {
+  if (!dict || dict.phase !== "recording") return;
+  dict.phase = "busy";
+  toOffscreen({ type: "stop", session: dict.session }).catch(() => {});
+  await toFrame(dict.tabId, 0, { op: "busy" });
+}
+
+async function cancelDictation() {
+  if (!dict) return;
+  toOffscreen({ type: "cancel", session: dict.session }).catch(() => {});
+  await endDictation(null, true);
+  await closeOffscreen();
+}
+
+// يُنهي الجلسة في الصفحة: الحقل أولًا (فينسخ ما لم يُكتب)، ثم الشريط.
+async function endDictation(message, cancelled = false) {
+  const d = dict;
+  dict = null;
+  if (!d) return;
+  const res = await toFrame(d.tabId, d.frameId, { op: "end", target: true, cancelled });
+  if (!message && res?.copied === true) message = "نُسخ النص";
+  else if (!message && res?.copied === false) message = "تعذّرت الكتابة هنا";
+  await toFrame(d.tabId, 0, { op: "end", ui: true, message });
+}
+
+async function toggleDictation(tab, frameHint) {
+  if (!tab?.id) return;
+  if (dict) {
+    if (dict.tabId === tab.id && dict.phase === "recording") await stopDictation();
+    return;
+  }
+  await startDictation(tab, frameHint);
+}
+
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  // من الصفحة: زر الإيقاف أو الإلغاء في الشريط، أو Esc
+  if (msg?.type === "crtl-dict-stop" || msg?.type === "crtl-dict-cancel") {
+    if (!dict || sender?.tab?.id !== dict.tabId) return;
+    if (msg.type === "crtl-dict-stop") stopDictation();
+    else cancelDictation();
+    return;
+  }
+
+  // من المستند الخفي
+  if (msg?.target !== "background" || !dict || msg.session !== dict.session) return;
+  switch (msg.type) {
+    case "off-level":
+      toFrame(dict.tabId, 0, { op: "level", elapsed: msg.elapsed, level: msg.level });
+      break;
+    case "off-stopped":
+      // توقف من تلقاء نفسه (بلوغ الحد أو انقطاع الميكروفون)
+      if (dict.phase === "recording") stopDictation();
+      break;
+    case "off-text":
+      toFrame(dict.tabId, dict.frameId, { op: "text", piece: msg.piece });
+      break;
+    case "off-done":
+      if (msg.tuning) {
+        const { model, ...rest } = msg.tuning;
+        if (model) chrome.storage.local.set({ [DICT_MODEL]: model });
+        chrome.storage.session.set({ [DICT_TUNING]: rest });
+      }
+      endDictation(msg.error || (msg.reason && msg.reason !== "limit" ? DICT_ERRORS[msg.reason] : null)).then(
+        closeOffscreen
+      );
+      break;
+  }
+});
+
+chrome.commands.onCommand.addListener((command, tab) => {
+  if (command === COMMAND_DICTATE) toggleDictation(tab);
+});
+
+// الصفحة أُغلقت أو انتقلت: لا يُكتب شيء في مكان آخر.
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (dict?.tabId === tabId) cancelDictation();
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (dict?.tabId === tabId && changeInfo.status === "loading") cancelDictation();
+});
+
 // ===== قائمة الزر الأيمن =====
 
 function createMenus() {
@@ -599,6 +820,11 @@ function createMenus() {
       id: MENU_PDF_PAGE,
       title: "حفظ الصفحة كملف PDF (بحجم الصفحة)",
       contexts: ["page"],
+    });
+    chrome.contextMenus.create({
+      id: MENU_DICTATE,
+      title: "إملاء",
+      contexts: ["editable"],
     });
   });
 }
@@ -664,6 +890,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
   if (info.menuItemId === MENU_PDF || info.menuItemId === MENU_PDF_PAGE) {
     await savePageAsPdf(tab);
+    return;
+  }
+  if (info.menuItemId === MENU_DICTATE) {
+    await toggleDictation(tab, info.frameId);
     return;
   }
   if (info.menuItemId !== MENU_ALWAYS) return;
