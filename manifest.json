@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "RTL Toggle",
-  "version": "1.5.3",
-  "description": "إصلاح اتجاه ومحاذاة النص العربي بنقرة واحدة، مع تثبيت الإصلاح على مواقع تختارها، وحفظ الصفحة كما تراها في ملف PDF بحجم الصفحة.",
-  "permissions": ["activeTab", "scripting", "contextMenus", "storage", "debugger", "downloads"],
+  "version": "1.6.0",
+  "description": "إصلاح اتجاه ومحاذاة النص العربي بنقرة واحدة، والإملاء بالصوت في أي حقل كتابة، وحفظ الصفحة كما تراها في ملف PDF بحجم الصفحة.",
+  "permissions": ["activeTab", "scripting", "contextMenus", "storage", "debugger", "downloads", "offscreen"],
   "optional_host_permissions": ["*://*/*"],
   "action": {
     "default_title": "تشغيل إصلاح RTL",
@@ -12,6 +12,14 @@
       "32": "icons/off-32.png",
       "48": "icons/off-48.png",
       "128": "icons/off-128.png"
+    }
+  },
+  "commands": {
+    "dictate": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Space"
+      },
+      "description": "إملاء"
     }
   },
   "options_ui": {
