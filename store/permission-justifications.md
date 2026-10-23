@@ -112,4 +112,4 @@ says the same. Certify all three statements:
 - I do not use or transfer user data to determine creditworthiness or for
   lending purposes.
 
-Source code available for review: https://github.com/muhammedalradi-hue/mango-tools
+Source code available for review: https://github.com/muhammedalradi-hue/RTL-Chrome-extension
