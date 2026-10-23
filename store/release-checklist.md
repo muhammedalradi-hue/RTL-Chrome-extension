@@ -7,7 +7,7 @@
 
 - [ ] ارفع رقم `version` في `manifest.json` (المتجر يرفض رقمًا مساويًا أو أقل من المنشور).
 - [ ] ادمج التغييرات في `main` وادفعها.
-- [ ] ابنِ الحزمة: `./scripts/package.sh` → `release/rtl-toggle-<الإصدار>.zip`.
+- [ ] ابنِ الحزمة: `./scripts/package.sh` → `release/mango-tools-<الإصدار>.zip`.
 - [ ] جرّب الحزمة يدويًا: فك الضغط، `chrome://extensions` → تحميل غير مضغوط.
 
 ## 2. في لوحة المطوّر (https://chrome.google.com/webstore/devconsole)

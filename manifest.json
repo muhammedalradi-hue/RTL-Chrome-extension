@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "RTL Toggle",
+  "name": "Mango Tools",
   "version": "1.6.0",
   "description": "إصلاح اتجاه ومحاذاة النص العربي بنقرة واحدة، والإملاء بالصوت في أي حقل كتابة، وحفظ الصفحة كما تراها في ملف PDF بحجم الصفحة.",
   "permissions": ["activeTab", "scripting", "contextMenus", "storage", "debugger", "downloads", "offscreen"],

@@ -1,12 +1,12 @@
 @governance/CLAUDE.md
 
-# RTL Toggle (Chrome extension): notes for coding agents
+# Mango Tools (Chrome extension, formerly RTL Toggle): notes for coding agents
 
 The line above imports the shared governance (git workflow, reviews, user-facing text, screens, security, how rules change). Everything below is specific to this project and must not relax it.
 
 ## What this repo is
 
-إضافة Chrome تصلح اتجاه ومحاذاة النصوص العربية في الصفحات التي تعرضها من اليسار إلى اليمين، بنقرة واحدة ودون تحديث الصفحة.
+أدوات Chrome للعربية: تصلح اتجاه ومحاذاة النصوص العربية في الصفحات التي تعرضها من اليسار إلى اليمين بنقرة واحدة ودون تحديث الصفحة، وتملي بالصوت في أي حقل، وتحفظ الصفحة PDF. اسمها السابق RTL Toggle، والشعار في `icons/logo.svg`.
 
 ## Stack and deployment
 

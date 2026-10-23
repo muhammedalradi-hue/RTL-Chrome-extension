@@ -7,7 +7,7 @@
 
 ## Single purpose description
 
-RTL Toggle helps people write and read Arabic in the browser: it fixes the
+Mango Tools (formerly RTL Toggle) helps people write and read Arabic in the browser: it fixes the
 direction and alignment of Arabic text on web pages that render it
 left-to-right, lets the user dictate text by voice into any text field, and
 lets the user save the corrected page exactly as displayed as a single-page PDF
