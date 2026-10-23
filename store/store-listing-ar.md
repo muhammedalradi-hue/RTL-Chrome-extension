@@ -25,4 +25,4 @@
 • لا تجمع الإضافة أي بيانات. إصلاح النص وحفظ PDF داخل متصفحك بالكامل، والإملاء وحده يرسل التسجيل الصوتي مباشرة إلى Google Gemini بمفتاحك ثم لا يُحفظ. المحفوظ محليًا: المواقع التي ثبّتها، ومفتاح Gemini ولغة الإملاء.
 
 الإضافة مفتوحة المصدر، والشيفرة كاملة متاحة للاطلاع والمراجعة على GitHub:
-https://github.com/muhammedalradi-hue/mango-tools
+https://github.com/muhammedalradi-hue/RTL-Chrome-extension
