@@ -1,4 +1,4 @@
-<!-- master-governance v2.13.4 · managed copy, do not edit here. Change it in github.com/muhammedalradi-hue/master-governance and run scripts/sync.sh (see "Changing a rule" below). -->
+<!-- master-governance v2.23.0 · managed copy, do not edit here. Change it in github.com/muhammedalradi-hue/master-governance and run scripts/sync.sh (see "Changing a rule" below). -->
 
 # Governance for coding agents
 
@@ -38,10 +38,12 @@ After any change to a screen, before opening the pull request:
 
 - Open it at phone width (~390px), tablet width (~900px) and desktop, in every supported locale and text direction. Take screenshots when you can.
 - Nothing cut off: dialogs, drawers, menus and dropdowns fit the viewport; no horizontal scrolling of the page; text is not truncated where it must be read.
+- A menu or popover opened at a pointer or a button is measured before it paints and placed inside the window: below or after the point, flipped above or before when there is no room, clamped a few pixels from every edge. Never place it by a guessed height. A test opens it at the screen's edge and reads its box against the viewport (owner, on Sheet Cabinet, 2026-10-27, after a right-click menu at the bottom edge ran off the screen several times: «نعم سجّلها في الحوكمة»).
 - Check the empty state, the loading state and the error state, not only the happy path.
 - Forms keep what the user typed when something fails.
 - Every password field has an eye button that shows or hides the password: inside the field at the end of the text, hidden by default, a plain button (it never submits the form) named in every locale, and pressing it keeps the focus and what was typed. This covers sign-in, sign-up, reset and change-password forms.
 - Look at the screenshots, not the code, and run the design check below.
+- **An approved design is built as approved** (owner, on Wakeb, 2026-10-27, approving a notifications design for implementation: «أي اعتماد من الديزاين إلى الكود لازم يكون في مطابقة تماماً للشكل look and feel… قد يتم تغيير بعض المحتوى قليلاً فقط للضرورة القصوى»). When the owner approves a design (a page, a mock-up, an email, a document) and asks for it to be built, the code reproduces its look and feel exactly: the same layout, spacing, type, colours, wording and order of elements, checked side by side against the approved design before delivery. Content changes only where building it exactly is impossible or breaks a rule the owner already set, and then as little as possible; every such change is named in the delivery with its reason, never slipped in. A difference the owner did not approve is a defect.
 
 ## Design
 
@@ -82,6 +84,8 @@ Removing these is half the work. A screen stripped of them and given nothing in 
 
 - The label above the field, never a placeholder in its place. The controls in one row share one height.
 - A disabled control stays readable. A destructive action comes last, in the negative colour, and its confirmation names the thing being deleted.
+- Every control works from the keyboard alone, in reading order, and has an accessible name: its visible label, or `aria-label` when it shows only an icon.
+- A control explains how to use it by its form, its label and its place; when it seems to need a sentence on how to operate it, redesign it. What a field accepts is different: remove the limit where you can (a date picker, a parser that takes any common format); a limit that remains (password rules, file type and size) stays visible beside the field, tied to it with `aria-describedby`.
 - One radius family chosen once (tight 4–8px or soft 16–24px), smaller inside than outside. One outline icon set, 16–20px, grey.
 - Spacing on a 4px grid; the gap between sections clearly larger than any gap inside one.
 
@@ -145,7 +149,7 @@ A landing page, a store page, a product site: the screens a buyer judges first.
 6. Five seconds as a stranger: what is this, and what do I do next? On a public page both answers are on the first screen.
 7. Read the "never" list, the generated-text list and the motion list against the screen.
 
-When Node 22 and Chromium are available (in a cloud container, see `skills/README.md`), also run the skill's inspector on the changed screen (`node <master clone>/skills/design-taste-frontend/scripts/inspect.mjs`, with `--app` for app screens) and fix what it fails. Its working folder `.taste-skill/` stays out of git. A landing page or a full redesign follows the skill's whole run (direction, idea, screenshots, critique) as well.
+When Node 22 and Chromium are available (in a cloud container, see `skills/README.md`), also run the skill's inspector on the changed screen (`node <master clone>/skills/design-taste-frontend/scripts/inspect.mjs`, with `--app` for app screens) and fix what it fails. With a build step, run it on the production build (`vite build && vite preview`, or the built `index.html`), not only on the dev server: bundlers change what ships. Its working folder `.taste-skill/` stays out of git. A landing page or a full redesign follows the skill's whole run (direction, idea, screenshots, critique) as well.
 
 **Owner-approved exceptions:** the AI page of `skills/at-design/` (breathing colour halos and its gradient) and the logo build of BP-04. Any other exception is the owner's, dated, in the project's `CLAUDE.md`.
 
@@ -170,7 +174,37 @@ Each change is built once (owner, on Photo Cabinet, after one change built three
 - The pull request builds the change. Merging it does not build the same content again: the merge run reuses what the pull request produced when the merged tree is identical (same tree hash), and builds again only when it differs (the base moved, or the merge changed something).
 - A new push to the same branch or pull request cancels the run it makes obsolete (`concurrency` with `cancel-in-progress`).
 - One trigger per change: a branch push and its pull request do not both run the same workflow.
-- Each session checks the project's own workflows against these four points and fixes what fails, in its own pull request before the task (owner, on Keyboard, 2026-10-23, after a merge into `main` rebuilt the APK the branch had just built: «ليش يبني نفس الإصدار مرتين؟ هذا ما لا داعي»). A rule in the master does nothing until the workflow follows it.
+- **Build only when the whole task is done** (owner, on Marsa, 2026-10-29, after a pull request was pushed and built while one of the notes in the same round was still being designed: «ما تبدأ بالبناء إلا بعد ما نخلص كل شيء»). When a task has several parts (a list of notes, a feature and its follow-ups), commit locally as you go but do not push or open the pull request until every part is written and checked locally; then push once. A part waiting for the owner's answer is not done: ask, and push after it is built. A fix to CI found after that push is the one exception.
+- Each session checks the project's own workflows against these points and fixes what fails, in its own pull request before the task (owner, on Keyboard, 2026-10-23, after a merge into `main` rebuilt the APK the branch had just built: «ليش يبني نفس الإصدار مرتين؟ هذا ما لا داعي»). A rule in the master does nothing until the workflow follows it.
+
+## Android releases
+
+An APK built in CI without an explicit signing configuration signs itself with a throwaway key, a new one on every build: each update is refused with «App not installed», and the only way round it is to uninstall, which loses what the user saved (owner, on Zubdah, 2026-10-25, after releases built a day apart would not install over each other on his phone).
+
+- Release builds are signed with the project's own key, named explicitly in the build configuration (for Flutter, a `signingConfigs` entry in `android/app/build.gradle.kts`), never by relying on a default debug keystore being found. A key kept in the repository is acceptable only for an app installed by hand, outside any store; a store app keeps its key in CI secrets.
+- The build compares the APK's certificate with the key (`apksigner verify --print-certs` against `keytool -list`) and fails when they differ.
+- Every build has a higher `versionCode` and a `versionName` that carries it (the CI run number, for example), so an update installs over the previous one and the phone's settings show which version is installed.
+- Each session on an Android project checks its workflow against these points with «CI builds» above, and fixes what fails in its own pull request before the task.
+
+## App stores
+
+Every app of the owner is published under the company, not a personal account (owner, on 10 KG, 2026-10-30). Keep this section current: when the owner reports a change in an account's state, update it here in the master in that session.
+
+| Store | Account | State |
+|---|---|---|
+| Google Play Console | `Cabinetai0@gmail.com`, organization account (company with a D-U-N-S number) | **Ready and complete** (2026-10-30) |
+| Apple Developer Program | `Cabinetai0@gmail.com`, organization enrolment (same company) | **Under review** (2026-10-30). Nothing can be published to the App Store or TestFlight until the owner says it is approved |
+
+Before an app's first release on a store, its project carries a written release plan, and the app meets these points:
+
+- **Signing.** Google Play: the app is uploaded as an Android App Bundle (`.aab`) with Play App Signing; the upload key lives in CI secrets, never in the repository (a debug or repository key is for hand-installed APKs only, see «Android releases»). The application id is final from the first upload: it can never change.
+- **Target level.** `targetSdk` meets Google Play's current requirement for new apps and updates, checked in Play Console before the first upload.
+- **Testing track.** An organization account has no minimum of testers, but a release goes through internal testing first, then closed testing, before production.
+- **Store policies the app must already meet:** a public privacy policy page on the product's own domain; account deletion inside the app and from a public web page when the app creates accounts; the Data safety form (Google) and privacy labels (Apple) filled from what the app really collects and sends, AI providers included; every sensitive permission declared with its reason (health data, notifications, location).
+- **Paid digital features** inside an app (subscriptions, unlocks) are sold through the store's own billing (Google Play Billing, StoreKit), never a link to an outside payment page. The server verifies every purchase with the store and keeps the entitlement; the app never decides alone that someone paid. Prices are entered tax-inclusive per country, and the price and the terms are the owner's decision.
+- **Listing.** The name, short and full description, screenshots and feature graphic follow «User-facing text» and the design rules, in every language the app supports, and the owner approves them before the release.
+
+When the owner says an app is going live, run the `applive` skill from the master clone (`skills/applive/`): gap assessment, store designs the owner approves, the paid plan and payments, cost risks with a warning and a fix, keywords and competitors, and a roadmap of what is done and what is not, updated after each phase (owner, on 10 KG, 2026-10-30).
 
 ## Security and data
 
@@ -193,9 +227,16 @@ When the owner asks to delete something from its roots («احذفه من جذو
 
 - Reply in the language the owner writes in. Keep it short: what changed, what you assumed, what they need to do.
 - **Every message the owner reads is in the language they wrote their last message in, with no exception** (owner, on 10 KG, after a reply came in English to an Arabic message: «إذا كلمتك بالعربي جاوبني بالعربي»). This covers short progress lines between tools, answers to a screenshot, step-by-step instructions and the final delivery alike. Interface names stay as the screen shows them (`Save`, `SMS OTP Expiry`), but the sentence around them is in the owner's language. Before sending, read the first line of the reply and ask: is this the owner's language?
+- **Decisions are asked on a page, never as questions in the chat** (owner, 2026-11-04, after eight questions came as chat text: «أبغى بس أختار الإجابات… أي قرارات تحتاجها مني تكون بهذه الطريقة»; the model is the question page built on Zubdah for training its AI model). When you need the owner to decide or clarify anything, gather every pending question into one decisions page (an artifact in a claude.ai session) instead of writing them in the reply or using the chat's question cards:
+  - One question per screen, with back and next, a progress count and a list to jump to any question; each question carries one line of context (the owner may see only the page), the options to tap (your recommendation first, marked as recommended, with its reason in one line), and an optional note for a free answer.
+  - Answers are saved as the owner taps (the page keeps them server-side, where you can read them, so leaving and coming back loses nothing), and a last screen shows every answer with a button that sends them to you.
+  - When the answers arrive, act on them at once and move to the next step, without asking again in the chat for anything the page already answered. Questions that come up later go on the same page or a new one, never as chat text.
+  - The reply that hands over the page is one line with its link.
 - Say plainly what was tested and what was not. Never present an untested change as verified.
 - When a decision is the owner's (product behaviour, data rules, money, deleting data), ask with a recommendation rather than deciding.
 - **Cloud session, local task: stop and say so first** (owner, 2026-10-21, on Marsa, after a Windows desktop app was built and tested only through CI from a cloud session: «لو طلبت منك امر بالسحابة وهو المفروض يكون على الجهاز توقف ونبهني»). The owner usually works in cloud sessions. When a request there needs the owner's own computer (building, running or testing a desktop app on Windows or macOS, the owner's local files or installed programs, devices or connections only that computer has), stop before starting, tell the owner in one line why it belongs on the computer, and let them choose: carry on in the cloud or move it there. Web, server and CI work stays in the cloud as usual.
+- **Code `xq55`: collect, do not start** (owner, 2026-10-23: «اذا كتبت xq55 تعتبر هذه شفرة يعني انا الآن بصدد مراجعة منتج ما… والمطلوب من Claude أن لا يبدأ بالعمل إلا حين انتهي من المتطلبات كلها»). When the owner writes `xq55`, they are reviewing a product and will send notes over several messages, one or more per message. Until they say to start or that the notes are finished, in any words («ابدأ»، «خلصت»، «هذا كل شيء»), do no work: no reading of code, no edits, no commits. Answer each message in one short line confirming the note was received and its number in the list, and ask only when a note cannot be understood. When the go comes, restate the full numbered list in one block, then work through all of it together.
+- **Cloud writes the code, the owner's computer tests and browses** (owner, 2026-10-23, on Zubdah: «نعتمد هذا المنهج لأي مشروع اعمل عليه في نسخة ال desktop… واذا كانت هذه الطريقة لاتصلح لمشروع معين… اقترح استثناءات»). In every project, the code is written in the cloud session and GitHub is its single source: branches, pull requests and merges happen there. A session on the owner's computer (Claude Desktop, or `claude remote-control` in the project folder) does what only that computer can: open sites that refuse connections from outside the owner's country, sign in to providers' consoles and command-line tools with the owner's accounts, measure speed from where the users are, and run or test what must run on that machine. It writes no product code: it hands its results to the cloud session through a research branch (for example `research/<topic>`) holding samples, notes and measurements, never a key, token or password, and the cloud session takes it from there. A cloud session never pretends to reach the computer and never fills a computer-only step with made-up results: it names the step, and the owner runs it there. When a project does not suit this split (for example a desktop app that must be built and run on the computer at every change, a project whose code lives only on that computer, or work that needs local hardware or large local data), the agent proposes an exception to the owner with its reason and a recommendation; an approved exception is written, dated, in that project's `CLAUDE.md`.
 
 ## Best practices
 
